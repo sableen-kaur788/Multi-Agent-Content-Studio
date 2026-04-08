@@ -12,6 +12,7 @@ Results for a given source string are cached for 1 hour (TTL) to avoid repeat wo
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from urllib.parse import parse_qs, urlparse
@@ -109,9 +110,11 @@ def _extract_youtube_sync(url: str) -> str:
 
             chunks = transcript.fetch()
     except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable) as e:
-        raise RuntimeError(f"YouTube transcript unavailable: {e}") from e
+        logger.warning("Transcript unavailable for %s: %s", url, e)
+        return _extract_youtube_fallback_sync(url, reason=str(e))
     except Exception as e:
-        raise RuntimeError(f"YouTube extraction failed: {e}") from e
+        logger.warning("Transcript extraction failed for %s: %s", url, e)
+        return _extract_youtube_fallback_sync(url, reason=str(e))
 
     # `chunks` can be:
     # - list[dict] (older versions)
@@ -132,6 +135,66 @@ def _extract_youtube_sync(url: str) -> str:
     if not text:
         raise RuntimeError(
             "YouTube transcript was empty (captions existed but contained no extractable text)."
+        )
+    return text
+
+
+def _extract_youtube_fallback_sync(url: str, *, reason: str) -> str:
+    """
+    Fallback for cloud IP blocks: fetch watch-page metadata/description.
+    This is lower quality than captions but keeps the pipeline usable.
+    """
+    try:
+        r = requests.get(
+            url,
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_REQUEST_TIMEOUT,
+        )
+        r.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(
+            "YouTube transcript is unavailable and fallback page fetch also failed. "
+            f"Transcript error: {reason}. Fallback error: {e}"
+        ) from e
+
+    html = r.text
+    title = ""
+    description = ""
+
+    m = re.search(r'<meta\s+name="title"\s+content="([^"]*)"', html, flags=re.I)
+    if m:
+        title = m.group(1).strip()
+
+    # Try ytInitialPlayerResponse JSON for a richer description.
+    m = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\});", html, flags=re.S)
+    if m:
+        try:
+            data = json.loads(m.group(1))
+            video_details = data.get("videoDetails") or {}
+            title = (video_details.get("title") or title or "").strip()
+            description = (video_details.get("shortDescription") or "").strip()
+        except Exception:
+            pass
+
+    if not description:
+        m = re.search(r'<meta\s+name="description"\s+content="([^"]*)"', html, flags=re.I)
+        if m:
+            description = m.group(1).strip()
+
+    pieces = [
+        "[Fallback notice] YouTube captions could not be retrieved from this server IP.",
+        f"Reason: {reason}",
+    ]
+    if title:
+        pieces.append(f"Title: {title}")
+    if description:
+        pieces.append("Description:")
+        pieces.append(description)
+    text = "\n".join(pieces).strip()
+    if len(text) < 80:
+        raise RuntimeError(
+            "YouTube transcript unavailable and fallback metadata extraction returned very little text. "
+            "Try another video, upload a PDF, or use a blog URL."
         )
     return text
 

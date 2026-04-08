@@ -127,6 +127,13 @@ def _run_pdf_bytes(data: bytes, platform: str, tone: str, language: str) -> bool
                     "system **Tesseract + Poppler**, or use a text-based PDF."
                 )
                 return False
+            except Exception as e:
+                st.error(
+                    "OCR failed for this PDF. On Hugging Face, confirm Docker installed "
+                    "`tesseract-ocr` and `poppler-utils`; locally, install Tesseract/Poppler "
+                    f"and retry.\n\nDetails: {e}"
+                )
+                return False
         if not raw_text:
             st.error("No text could be extracted from this PDF.")
             return False
