@@ -1,5 +1,7 @@
 # Multi-Agent Content Studio
 
+Demo - https://multi-agent-content-studio.onrender.com
+
 **Streamlit** UI (`streamlit_app.py`): paste a **YouTube/blog URL** or **upload a PDF**, choose platform (Twitter / LinkedIn / Instagram), tone, and language (English or Hindi). The pipeline runs **extract → summarize → platform draft → tone → translate (if Hindi)**. All LLM steps use the **Groq** API (default model configurable via `GROQ_MODEL`).
 
 **Optional:** **FastAPI** (`uvicorn app.main:app`) exposes `/process`, `/ui`, and OpenAPI docs for API-driven use.
@@ -73,6 +75,15 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 - OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - Built-in HTML UI: `http://127.0.0.1:8000/ui` (same host/port as uvicorn)
+
+<img width="1626" height="858" alt="1 py" src="https://github.com/user-attachments/assets/635978fc-ba18-44b5-964d-9cbc8ba18781" />
+
+
+<img width="1532" height="856" alt="4 py" src="https://github.com/user-attachments/assets/2af40753-4411-45b4-b366-aea2d00ef3a3" />
+
+<img width="1222" height="848" alt="2 py" src="https://github.com/user-attachments/assets/d0278ce3-c1b9-4ab8-841a-ce488e2e6f06" />
+
+
 
 ## API reference (FastAPI)
 
