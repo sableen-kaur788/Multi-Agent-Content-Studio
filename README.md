@@ -1,5 +1,7 @@
 # Multi-Agent Content Studio
 
+Demo - https://multi-agent-content-studio.onrender.com
+
 **Streamlit** UI (`streamlit_app.py`): paste a **YouTube/blog URL** or **upload a PDF**, choose platform (Twitter / LinkedIn / Instagram), tone, and language (English or Hindi). The pipeline runs **extract → summarize → platform draft → tone → translate (if Hindi)**. All LLM steps use the **Groq** API (default model configurable via `GROQ_MODEL`).
 
 **Optional:** **FastAPI** (`uvicorn app.main:app`) exposes `/process`, `/ui`, and OpenAPI docs for API-driven use.
