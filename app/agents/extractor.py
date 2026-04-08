@@ -183,52 +183,76 @@ def _extract_youtube_fallback_sync(url: str, *, reason: str) -> str:
     Fallback for cloud IP blocks: fetch watch-page metadata/description.
     This is lower quality than captions but keeps the pipeline usable.
     """
-    try:
-        r = requests.get(url, **_requests_kwargs())
-        r.raise_for_status()
-    except requests.RequestException as e:
-        raise RuntimeError(
-            "YouTube transcript is unavailable and fallback page fetch also failed. "
-            f"Transcript error: {reason}. Fallback error: {e}"
-        ) from e
-
-    html = r.text
+    # 1) First try oEmbed (usually lighter and succeeds even when watch page is blocked).
     title = ""
     description = ""
+    try:
+        oembed = requests.get(
+            "https://www.youtube.com/oembed",
+            params={"url": url, "format": "json"},
+            **_requests_kwargs(),
+        )
+        if oembed.ok:
+            data = oembed.json()
+            title = (data.get("title") or "").strip()
+    except Exception:
+        pass
 
-    m = re.search(r'<meta\s+name="title"\s+content="([^"]*)"', html, flags=re.I)
-    if m:
-        title = m.group(1).strip()
-
-    # Try ytInitialPlayerResponse JSON for a richer description.
-    m = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\});", html, flags=re.S)
-    if m:
-        try:
-            data = json.loads(m.group(1))
-            video_details = data.get("videoDetails") or {}
-            title = (video_details.get("title") or title or "").strip()
-            description = (video_details.get("shortDescription") or "").strip()
-        except Exception:
-            pass
-
+    # 2) Only if we still need more details, try the watch page.
     if not description:
-        m = re.search(r'<meta\s+name="description"\s+content="([^"]*)"', html, flags=re.I)
-        if m:
-            description = m.group(1).strip()
-
-    # Last fallback: YouTube oEmbed is often available even when transcript API is blocked.
-    if not title:
         try:
-            oembed = requests.get(
-                "https://www.youtube.com/oembed",
-                params={"url": url, "format": "json"},
-                **_requests_kwargs(),
+            r = requests.get(url, **_requests_kwargs())
+            if r.status_code == 429:
+                # YouTube is blocking this IP even for metadata.
+                pieces = [
+                    "[Fallback notice] YouTube captions are blocked (429 Too Many Requests) from this server IP.",
+                    f"Reason: {reason}",
+                ]
+                if title:
+                    pieces.append(f"Title: {title}")
+                pieces.append(
+                    "Tip: Try again later, or use a blog URL/PDF upload instead of YouTube transcripts."
+                )
+                return "\n".join(pieces).strip()
+
+            r.raise_for_status()
+            html = r.text
+
+            m = re.search(
+                r'<meta\s+name="title"\s+content="([^"]*)"', html, flags=re.I
             )
-            if oembed.ok:
-                data = oembed.json()
-                title = (data.get("title") or "").strip()
-        except Exception:
-            pass
+            if m and not title:
+                title = m.group(1).strip()
+
+            # Try ytInitialPlayerResponse JSON for a richer description.
+            m = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\});", html, flags=re.S)
+            if m:
+                try:
+                    data = json.loads(m.group(1))
+                    video_details = data.get("videoDetails") or {}
+                    title = (video_details.get("title") or title or "").strip()
+                    description = (video_details.get("shortDescription") or "").strip()
+                except Exception:
+                    pass
+
+            if not description:
+                m = re.search(
+                    r'<meta\s+name="description"\s+content="([^"]*)"', html, flags=re.I
+                )
+                if m:
+                    description = m.group(1).strip()
+        except requests.RequestException:
+            # Don’t crash the whole pipeline for metadata blockages.
+            pieces = [
+                "[Fallback notice] YouTube captions are unavailable from this server IP.",
+                f"Reason: {reason}",
+            ]
+            if title:
+                pieces.append(f"Title: {title}")
+            pieces.append(
+                "Tip: Try again later, or use a blog URL/PDF upload instead of YouTube transcripts."
+            )
+            return "\n".join(pieces).strip()
 
     pieces = [
         "[Fallback notice] YouTube captions could not be retrieved from this server IP.",

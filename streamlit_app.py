@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -24,7 +25,6 @@ from pypdf import PdfReader
 try:
     from app.config import get_settings
     from app.ocr import ocr_pdf_bytes_to_text
-    from app.pdf_report import agent_step_pdf, final_report_pdf
     from app.pipeline_full import run_from_source, run_text_pipeline
     from app.ui_trace import pipeline_step_panels
 except ModuleNotFoundError as _import_err:
@@ -32,7 +32,6 @@ except ModuleNotFoundError as _import_err:
         raise
     from First_CrewAI.app.config import get_settings
     from First_CrewAI.app.ocr import ocr_pdf_bytes_to_text
-    from First_CrewAI.app.pdf_report import agent_step_pdf, final_report_pdf
     from First_CrewAI.app.pipeline_full import run_from_source, run_text_pipeline
     from First_CrewAI.app.ui_trace import pipeline_step_panels
 
@@ -85,6 +84,13 @@ if "run_id" not in st.session_state:
     st.session_state.run_id = 0
 if "last_run_options" not in st.session_state:
     st.session_state.last_run_options = {}
+if "last_download_slug" not in st.session_state:
+    st.session_state.last_download_slug = "run"
+
+
+def _dynamic_slug(*, platform: str, tone: str, language: str, run_id: int) -> str:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{platform}_{tone}_{language}_{ts}_r{run_id}"
 
 
 def _run_url(source: str, platform: str, tone: str, language: str) -> bool:
@@ -107,6 +113,9 @@ def _run_url(source: str, platform: str, tone: str, language: str) -> bool:
             "tone": tone,
             "language": language,
         }
+        st.session_state.last_download_slug = _dynamic_slug(
+            platform=platform, tone=tone, language=language, run_id=st.session_state.run_id
+        )
         st.toast("Content ready. Scroll down to Results.")
         return True
     except Exception as e:
@@ -151,6 +160,9 @@ def _run_pdf_bytes(data: bytes, platform: str, tone: str, language: str) -> bool
             "tone": tone,
             "language": language,
         }
+        st.session_state.last_download_slug = _dynamic_slug(
+            platform=platform, tone=tone, language=language, run_id=st.session_state.run_id
+        )
         st.toast("Content ready. Scroll down to Results.")
         return True
     except Exception as e:
@@ -264,18 +276,19 @@ else:
     rt = opts.get("tone", tone)
     rl = opts.get("language", language)
     src_hint = str(out.get("source_kind") or "PDF upload")
-    pdf_final: bytes | None = None
-    pdf_err: str | None = None
-    try:
-        pdf_final = final_report_pdf(
-            final,
-            platform=rp,
-            tone=rt,
-            language=rl,
-            source_hint=src_hint,
-        )
-    except Exception as ex:
-        pdf_err = str(ex)
+    slug = st.session_state.get("last_download_slug") or _dynamic_slug(
+        platform=rp, tone=rt, language=rl, run_id=st.session_state.run_id
+    )
+    final_report_text = (
+        "Final report\n"
+        f"Platform: {rp}\n"
+        f"Tone: {rt}\n"
+        f"Language: {rl}\n"
+        f"Source: {src_hint}\n"
+        "Final post from the tone adjuster and translator (if Hindi).\n"
+        "---\n"
+        f"{final}\n"
+    )
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -289,23 +302,20 @@ else:
         st.metric("Source", str(sk)[:18] + ("…" if len(str(sk)) > 18 else ""))
 
     st.markdown(
-        "**Final report (PDF)** — only the last agents’ output (tone / translate). "
-        "Per-agent PDFs are under **Agent-by-agent**."
+        "**Final report (.txt)** — exact output text from the last agents (tone / translate). "
+        "Per-agent `.txt` downloads are under **Agent-by-agent**."
     )
-    if pdf_err:
-        st.warning(f"PDF export failed ({pdf_err}). You can still copy text from the preview.")
 
     dl1, dl2 = st.columns([1, 1])
     with dl1:
-        if pdf_final:
-            st.download_button(
-                label="Download final report · PDF",
-                data=pdf_final,
-                file_name="final_report.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                key="dl_report_pdf_top",
-            )
+        st.download_button(
+            label="Download final report · TXT",
+            data=final_report_text,
+            file_name=f"final_report_{slug}.txt",
+            mime="text/plain",
+            use_container_width=True,
+            key="dl_report_txt_top",
+        )
     with dl2:
         if st.button("Clear results", use_container_width=True, key="clear_top"):
             st.session_state.pipeline_result = None
@@ -314,7 +324,7 @@ else:
 
     out_tab, agents_tab = st.tabs(["Final post", "Agent-by-agent"])
     with out_tab:
-        st.caption("Copy from the box or download **final_report.pdf** above.")
+        st.caption("Copy from the box or download **final_report.txt** above.")
         st.text_area(
             "Ready to copy",
             value=final,
@@ -323,27 +333,21 @@ else:
             label_visibility="collapsed",
             key=f"final_out_{st.session_state.run_id}",
         )
-        if pdf_final:
-            st.download_button(
-                "Download final report (PDF)",
-                data=pdf_final,
-                file_name="final_report.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                key="dl_report_pdf_tab",
-            )
+        st.download_button(
+            "Download final report (.txt)",
+            data=final_report_text,
+            file_name=f"final_report_{slug}.txt",
+            mime="text/plain",
+            use_container_width=True,
+            key="dl_report_txt_tab",
+        )
     with agents_tab:
-        st.caption("Each row: preview + **Download PDF** for that agent only.")
+        st.caption("Each row: preview + **Download .txt** for that agent only.")
         rid = st.session_state.run_id
         for i, (short, full_title, body) in enumerate(pipeline_step_panels(out)):
             h = min(400, max(140, 80 + body.count("\n") * 16))
             safe_name = "".join(c if c.isalnum() else "_" for c in short)[:40] or f"step_{i + 1}"
-            step_pdf: bytes | None = None
-            step_pdf_err: str | None = None
-            try:
-                step_pdf = agent_step_pdf(short, full_title, body, language=rl)
-            except Exception as ex:
-                step_pdf_err = str(ex)
+            step_text = f"{full_title}\nStep: {short}\n---\n{body}\n"
             with st.expander(f"{full_title} · {short}", expanded=False):
                 st.text_area(
                     "output",
@@ -353,14 +357,11 @@ else:
                     label_visibility="collapsed",
                     key=f"agent_{rid}_{i}",
                 )
-                if step_pdf:
-                    st.download_button(
-                        f"Download this agent · PDF ({short})",
-                        data=step_pdf,
-                        file_name=f"agent_{i + 1}_{safe_name}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key=f"dl_agent_pdf_{rid}_{i}",
-                    )
-                elif step_pdf_err:
-                    st.caption(f"PDF for this step failed: {step_pdf_err[:120]}")
+                st.download_button(
+                    f"Download this agent · TXT ({short})",
+                    data=step_text,
+                    file_name=f"agent_{i + 1}_{safe_name}_{slug}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key=f"dl_agent_txt_{rid}_{i}",
+                )
