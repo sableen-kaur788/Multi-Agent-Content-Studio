@@ -74,6 +74,10 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - OpenAPI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - Built-in HTML UI: `http://127.0.0.1:8000/ui` (same host/port as uvicorn)
 
+C:\Users\sable\Downloads\1.py.png
+
+C:\Users\sable\Downloads\4.py.png
+
 ## API reference (FastAPI)
 
 | Method | Path | Description |
