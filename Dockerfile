@@ -1,4 +1,4 @@
-# Hugging Face Docker Space: Debian Bookworm — Tesseract + Poppler for PDF OCR.
+# Docker (Render-friendly): Debian Bookworm — Tesseract + Poppler for PDF OCR.
 FROM python:3.10-slim-bookworm
 
 ENV PIP_NO_CACHE_DIR=1 \

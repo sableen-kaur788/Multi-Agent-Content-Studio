@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from urllib.parse import parse_qs, urlparse
 
@@ -36,6 +37,43 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 _REQUEST_TIMEOUT = 30
+
+
+def _proxy_url() -> str:
+    """
+    Optional proxy for cloud deployments where YouTube blocks datacenter IPs.
+    Supports either:
+    - YT_HTTP_PROXY
+    - HTTPS_PROXY / HTTP_PROXY
+    """
+    return (
+        os.getenv("YT_HTTP_PROXY", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("HTTP_PROXY", "").strip()
+    )
+
+
+def _requests_kwargs() -> dict:
+    kwargs = {
+        "headers": {"User-Agent": _USER_AGENT},
+        "timeout": _REQUEST_TIMEOUT,
+    }
+    proxy = _proxy_url()
+    if proxy:
+        kwargs["proxies"] = {"http": proxy, "https": proxy}
+    return kwargs
+
+
+def _apply_proxy_env_for_transcript_api() -> None:
+    """
+    youtube-transcript-api uses HTTP requests internally; many versions honor proxy
+    env vars. Set these at runtime when YT_HTTP_PROXY is provided.
+    """
+    proxy = _proxy_url()
+    if not proxy:
+        return
+    os.environ["HTTP_PROXY"] = proxy
+    os.environ["HTTPS_PROXY"] = proxy
 
 
 def _youtube_video_id(url: str) -> str | None:
@@ -61,6 +99,7 @@ def _extract_youtube_sync(url: str) -> str:
     vid = _youtube_video_id(url)
     if not vid:
         raise ValueError("Could not parse YouTube video ID from URL.")
+    _apply_proxy_env_for_transcript_api()
     try:
         # youtube-transcript-api has multiple versions/APIs.
         # We support:
@@ -145,11 +184,7 @@ def _extract_youtube_fallback_sync(url: str, *, reason: str) -> str:
     This is lower quality than captions but keeps the pipeline usable.
     """
     try:
-        r = requests.get(
-            url,
-            headers={"User-Agent": _USER_AGENT},
-            timeout=_REQUEST_TIMEOUT,
-        )
+        r = requests.get(url, **_requests_kwargs())
         r.raise_for_status()
     except requests.RequestException as e:
         raise RuntimeError(
@@ -181,6 +216,20 @@ def _extract_youtube_fallback_sync(url: str, *, reason: str) -> str:
         if m:
             description = m.group(1).strip()
 
+    # Last fallback: YouTube oEmbed is often available even when transcript API is blocked.
+    if not title:
+        try:
+            oembed = requests.get(
+                "https://www.youtube.com/oembed",
+                params={"url": url, "format": "json"},
+                **_requests_kwargs(),
+            )
+            if oembed.ok:
+                data = oembed.json()
+                title = (data.get("title") or "").strip()
+        except Exception:
+            pass
+
     pieces = [
         "[Fallback notice] YouTube captions could not be retrieved from this server IP.",
         f"Reason: {reason}",
@@ -191,10 +240,13 @@ def _extract_youtube_fallback_sync(url: str, *, reason: str) -> str:
         pieces.append("Description:")
         pieces.append(description)
     text = "\n".join(pieces).strip()
-    if len(text) < 80:
-        raise RuntimeError(
-            "YouTube transcript unavailable and fallback metadata extraction returned very little text. "
-            "Try another video, upload a PDF, or use a blog URL."
+    # Never hard-fail on short fallback content; downstream agents can still work.
+    if len(text) < 40:
+        text = (
+            "[Fallback notice] YouTube captions were blocked from this server IP.\n"
+            f"Reason: {reason}\n"
+            f"Video URL: {url}\n"
+            "Tip: For richer output, try another public video, a blog URL, or PDF input."
         )
     return text
 
@@ -219,11 +271,7 @@ def _visible_text_from_soup(soup: BeautifulSoup) -> str:
 
 def _extract_blog_sync(url: str) -> str:
     try:
-        r = requests.get(
-            url,
-            headers={"User-Agent": _USER_AGENT},
-            timeout=_REQUEST_TIMEOUT,
-        )
+        r = requests.get(url, **_requests_kwargs())
         r.raise_for_status()
     except requests.RequestException as e:
         raise RuntimeError(f"Failed to fetch blog URL: {e}") from e

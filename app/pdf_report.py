@@ -10,6 +10,29 @@ _FONT_FAMILY = "UniRep"
 
 # Devanagari block (Hindi, Marathi, etc.)
 _DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+_SMART_PUNCT_MAP = {
+    "’": "'",
+    "‘": "'",
+    "“": "\"",
+    "”": "\"",
+    "—": "-",
+    "–": "-",
+    "…": "...",
+    "\u00a0": " ",  # nbsp
+}
+
+
+def _sanitize_for_helvetica(text: str) -> str:
+    """
+    fpdf's core fonts (Helvetica) only support Latin-1. When no Unicode TTF is available,
+    sanitize common smart punctuation so PDF generation doesn't crash.
+    """
+    if not text:
+        return text
+    for k, v in _SMART_PUNCT_MAP.items():
+        text = text.replace(k, v)
+    # Drop any remaining non latin-1 chars
+    return text.encode("latin-1", errors="ignore").decode("latin-1", errors="ignore")
 
 
 def _bundled_devanagari_font() -> Path | None:
@@ -80,12 +103,7 @@ def _pick_font_path(language: str, title: str, meta_lines: list[str], body: str)
         ):
             if p is not None and p.is_file():
                 return p
-        # No Unicode font available: fail fast instead of producing a broken Helvetica PDF.
-        raise RuntimeError(
-            "No Devanagari-capable font found for PDF export. "
-            "On Hugging Face Docker this should be available via fonts-noto-core. "
-            "On Windows install a Devanagari font (e.g. Mangal/Nirmala) and retry."
-        )
+        return None
     for p in (_linux_noto_regular(), _dejavu_font_path()):
         if p is not None and p.is_file():
             return p
@@ -105,6 +123,7 @@ def _pdf_bytes(title: str, meta_lines: list[str], body: str, *, language: str) -
     pdf.set_auto_page_break(auto=True, margin=14)
     pdf.add_page()
 
+    needs_dev = _needs_devanagari(language, title, "\n".join(meta_lines), body)
     path = _pick_font_path(language, title, meta_lines, body)
     use_uni = False
     if path and path.is_file():
@@ -113,6 +132,23 @@ def _pdf_bytes(title: str, meta_lines: list[str], body: str, *, language: str) -
             use_uni = True
         except Exception:
             use_uni = False
+    if needs_dev and not use_uni:
+        # Avoid hard failure on Windows when a Devanagari font isn't installed.
+        # Generate a PDF with a clear note and a sanitized (non-Devanagari) body.
+        meta_lines = (
+            [
+                "NOTE: Your system does not have a Devanagari-capable font installed,",
+                "so Hindi characters may be missing in this PDF. Install a Devanagari font",
+                "(e.g. Mangal or Nirmala UI) and try again for proper Hindi PDFs.",
+                "",
+            ]
+            + meta_lines
+        )
+        body = _DEVANAGARI_RE.sub("", body or "")
+    if not use_uni:
+        title = _sanitize_for_helvetica(title)
+        meta_lines = [_sanitize_for_helvetica(l) for l in meta_lines]
+        body = _sanitize_for_helvetica(body or "")
 
     def set_font(size: int) -> None:
         if use_uni:

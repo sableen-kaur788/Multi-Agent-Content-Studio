@@ -1,5 +1,5 @@
 .env
-.env.example
+# Keep `.env.example` in git for setup help
 .venv/
 venv/
 __pycache__/

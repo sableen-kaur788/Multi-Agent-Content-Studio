@@ -1,26 +1,20 @@
----
-title: "Multi Agent Content Studio"
-emoji: "🤖"
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
----
-
-# Multi-Agent Content Studio (Streamlit + Groq)
+# Multi-Agent Content Studio
 
 **Streamlit** UI (`streamlit_app.py`): paste a **YouTube/blog URL** or **upload a PDF**, choose platform (Twitter / LinkedIn / Instagram), tone, and language (English or Hindi). The pipeline runs **extract → summarize → platform draft → tone → translate (if Hindi)**. All LLM steps use the **Groq** API (default model configurable via `GROQ_MODEL`).
 
 **Optional:** **FastAPI** (`uvicorn app.main:app`) exposes `/process`, `/ui`, and OpenAPI docs for API-driven use.
 
-## Hugging Face Space (Docker)
+## Deploy on Render (Docker)
 
-- Keep the **YAML block above** as real values (no `{{title}}` placeholders).
-- **SDK:** `docker` — build uses the root **`Dockerfile`** (Python 3.10, Tesseract, Poppler, Noto fonts).
-- **UI:** `streamlit run streamlit_app.py` on port **7860**.
-- **Dependencies:** **`requirements-space.txt`** (not the full `requirements.txt` in Docker).
-- **Secrets:** `GROQ_API_KEY` (required); optional `GROQ_MODEL`, `GROQ_TEMPERATURE`.
-- **Include in git:** `app/`, `data/` (YAML files). Do **not** commit `.env`.
+This repo includes a root `Dockerfile` that runs Streamlit and installs OCR system deps (Tesseract + Poppler).
+
+- **Render service**: New → Web Service → connect your GitHub repo
+- **Runtime**: Docker
+- **Environment variables**:
+  - `GROQ_API_KEY` (required)
+  - Optional: `GROQ_MODEL`, `GROQ_TEMPERATURE`
+
+Render provides a `PORT` environment variable automatically; the container starts Streamlit on `${PORT}`.
 
 ## Prerequisites
 
@@ -67,7 +61,7 @@ pinned: false
 streamlit run streamlit_app.py
 ```
 
-Open [http://localhost:8501](http://localhost:8501). On Hugging Face, the app is served on port **7860**.
+Open [http://localhost:8501](http://localhost:8501).
 
 **Features:** metrics after each run, **final report PDF**, per-agent PDFs under **Agent-by-agent**, copy-friendly text preview.
 
@@ -123,26 +117,4 @@ Groq calls use shared **`GroqClient`** with exponential backoff (up to **3** att
 ## License
 
 Use and modify as needed for your own projects.
- 
-=======
----
-title: Multi Agent Content Studio
-emoji: 🚀
-colorFrom: red
-colorTo: red
-sdk: docker
-app_port: 8501
-tags:
-- streamlit
-pinned: false
-short_description: YouTube, blog, PDF → Twitter, LinkedIn, Instagram
-license: mit
----
 
-# Welcome to Streamlit!
-
-Edit `/src/streamlit_app.py` to customize this app to your heart's desire. :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
->>>>>>> d9be070ce79e63751534c32c5b34191f072134e2
