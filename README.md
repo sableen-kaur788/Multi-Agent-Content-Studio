@@ -79,6 +79,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 <img width="1532" height="856" alt="4 py" src="https://github.com/user-attachments/assets/2af40753-4411-45b4-b366-aea2d00ef3a3" />
 
+<img width="1222" height="848" alt="2 py" src="https://github.com/user-attachments/assets/d0278ce3-c1b9-4ab8-841a-ce488e2e6f06" />
+
+
 
 ## API reference (FastAPI)
 
