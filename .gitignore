@@ -1,0 +1,31 @@
+.env
+.env.example
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local runtime artifacts
+uploads/
+*.log
+data/app.db
+
+# Hugging Face / model caches
+.cache/
+hf_cache/
+
+# Prevent committing large/binary fonts
+data/fonts/*.ttf
+data/fonts/*.otf

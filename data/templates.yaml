@@ -1,0 +1,8 @@
+# Reusable post templates (str.format placeholders).
+templates:
+  thread_opener:
+    twitter: "🧵 Let me break down {topic} in {count} points:\n\n1. {point1}\n2. {point2}"
+  launch_post:
+    twitter: "🚀 {product} just launched! {benefit1}\n{benefit2}"
+  case_study:
+    linkedin: "How {client} achieved {result} using {solution}..."

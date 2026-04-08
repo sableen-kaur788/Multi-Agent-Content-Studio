@@ -1,0 +1,14 @@
+# Optional brand voice hints (merged into prompts when brand_profile is set).
+profiles:
+  tech_startup:
+    tone_hint: "casual"
+    emoji_density: "high"
+    hashtag_count: 5
+  b2b_consulting:
+    tone_hint: "professional"
+    emoji_density: "none"
+    hashtag_count: 2
+  nonprofit:
+    tone_hint: "empathetic"
+    emoji_density: "medium"
+    hashtag_count: 4
